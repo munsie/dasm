@@ -229,7 +229,7 @@ STRLIST {
     char    buf[4];
 };
 
-#define STRLISTSIZE    4
+#define STRLISTSIZE    sizeof(STRLIST *)
 
 #define MF_IF					0x04
 #define MF_MACRO				0x08
