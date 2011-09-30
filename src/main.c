@@ -102,6 +102,7 @@ ERROR_DEFINITION sErrorDef[] = {
 	{ ERROR_VALUE_MUST_BE_LT_F,						true,	"Value in '%s' must be <$f." },
 	{ ERROR_VALUE_MUST_BE_LT_10000,					true,	"Value in '%s' must be <$10000." },
 	{ ERROR_ILLEGAL_OPERAND_COMBINATION,			true,	"Illegal combination of operands '%s'" },
+    { ERROR_UNRECOVERABLE,                          true,   "Unrecoverable error(s) in pass, aborting assembly!" },
     {-1, true, "Doh! Internal end-of-table marker, report the bug!"}
 };
 
@@ -680,7 +681,7 @@ nextpass:
             
             if ( bStopAtEnd )
             {
-                printf("Unrecoverable error(s) in pass, aborting assembly!\n");
+                return ERROR_UNRECOVERABLE;
             }
             else if ( pass > nMaxPasses )
             {
