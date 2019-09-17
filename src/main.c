@@ -37,8 +37,10 @@ SVNTAG("$Id: main.c 115 2008-04-08 02:55:57Z phf $");
 
 static const char dasm_id[] = "DASM 2.20.11";
 
-#define MAXLINE 1024
-#define ISEGNAME    "INITIAL CODE SEGMENT"
+#define MAXLINE           1024
+#define ISEGNAME          "INITIAL CODE SEGMENT"
+#define SEGMENT_FORMAT    "%-24s %-3s %-8s %-8s %-8s %-8s\n"
+
 
 /*
    replace old atoi() calls; I wanted to protect this using
@@ -59,6 +61,9 @@ void clearrefs(void);
 static unsigned int hash1(const char *str);
 static void outlistfile(const char *);
 
+static int DumpSymbols(void);
+
+bool NoIceSupport = false;
 
 
 /* Table encapsulates errors, descriptions, and fatality flags. */
@@ -192,6 +197,24 @@ static int CompareAddress( const void *arg1, const void *arg2 )
     return sym1->value - sym2->value;
 }
 
+static int DumpSymbols(void)
+{
+    SYMBOL *sym;
+    int i;
+    int nSymbols = 0;
+
+    /* Count the number of symbols and dump them to the noice file */
+    for (i = 0; i < SHASHSIZE; ++i) {
+        for (sym = SHash[i]; sym; sym = sym->next)
+        {
+          nSymbols++;
+          if (NoIceSupport)
+              fprintf(FI_noicefile, "DEFINE %s %s\n", sym->name, sftos( sym->value, 0));
+        }
+    }
+    return nSymbols;
+}
+
 /* bTableSort true -> by address, false -> by name [phf] */
 static void ShowSymbols( FILE *file, bool bTableSort )
 {
@@ -263,24 +286,19 @@ static void ShowSymbols( FILE *file, bool bTableSort )
         
 }
 
-
-
 static void ShowSegments(void)
 {
     SEGMENT *seg;
     const char *bss;
-    const char *sFormat = "%-24s %-3s %-8s %-8s %-8s %-8s\n\0";
-    
-    
     
     printf("\n----------------------------------------------------------------------\n");
-    printf( sFormat, "SEGMENT NAME", "", "INIT PC", "INIT RPC", "FINAL PC", "FINAL RPC" );
+    printf( SEGMENT_FORMAT, "SEGMENT NAME", "", "INIT PC", "INIT RPC", "FINAL PC", "FINAL RPC" );
     
     for (seg = Seglist; seg; seg = seg->next)
     {
         bss = (seg->flags & SF_BSS) ? "[u]" : "   ";
         
-        printf( sFormat, seg->name, bss,
+        printf( SEGMENT_FORMAT, seg->name, bss,
             sftos(seg->initorg, seg->initflags), sftos(seg->initrorg, seg->initrflags),
             sftos(seg->org, seg->flags), sftos(seg->rorg, seg->rflags) );
     }
@@ -364,14 +382,12 @@ static void DumpSymbolTable( bool bTableSort )
 
 static int MainShadow(int ac, char **av, bool *pbTableSort )
 {
-    
-    
-    
     int nError = ERROR_NONE;
     bool bDoAllPasses = false;
     int nMaxPasses = 10;
     
     char buf[MAXLINE];
+    char CurrentFile[256];
     int i;
     MNEMONIC *mne;
     
@@ -381,7 +397,7 @@ static int MainShadow(int ac, char **av, bool *pbTableSort )
     
     addhashtable(Ops);
     pass = 1;
-
+    
     if (ac < 2)
     {
 
@@ -399,6 +415,7 @@ fail:
     puts("-lname   list file name (else none generated)");
     puts("-Lname   list file, containing all passes");
     puts("-sname   symbol dump file name (else none generated)");
+    puts("-nname   create .noi file for the noice debugger");    
     puts("-v#      verboseness 0-4 (default 0)");
     puts("-d       debug mode (for developers)");
     puts("-Dsymbol              define symbol, set to 0");
@@ -450,23 +467,29 @@ fail:
                 
             case 'M':
             case 'D':
-                while (*str && *str != '=')
-                    ++str;
-                if (*str == '=')
                 {
-                    *str = 0;
-                    ++str;
+                    char eStr[2];
+                    
+                    while (*str && *str != '=')
+                        ++str;
+                    if (*str == '=')
+                    {
+                        *str = 0;
+                        ++str;
+                    }
+                    else
+                    {
+                        memset(eStr, 0, sizeof eStr);
+                        strncpy(eStr, "0", 1);
+                        str = eStr;
+                    }
+                    Av[0] = av[i]+2;
+                    
+                    if (av[i][1] == 'M')
+                        v_eqm(str, NULL);
+                    else
+                        v_set(str, NULL);
                 }
-                else
-                {
-                    str = "0";
-                }
-                Av[0] = av[i]+2;
-                
-                if (av[i][1] == 'M')
-                    v_eqm(str, NULL);
-                else
-                    v_set(str, NULL);
                 break;
                 
             case 'f':   /*  F_format    */
@@ -508,6 +531,12 @@ nofile:
             case 'I':
                 v_incdir(str, NULL);
                 break;
+
+            case 'n':
+                NoIceSupport = true;
+                F_noicefile = str;
+                break;
+
                 
             default:
                 goto fail;
@@ -544,6 +573,15 @@ nextpass:
         puts("");
         printf("START OF PASS: %d\n", pass);
     }
+
+    if (NoIceSupport) {
+        FI_noicefile = fopen(F_noicefile, "wb");
+        if (FI_noicefile == NULL) {
+            printf("Warning: Unable to [re]open NoIce file '%s'\n", F_noicefile);
+            return ERROR_FILE_ERROR;
+        }
+        fprintf(FI_noicefile, "LASTFILELOADED\n"); 
+    }
     
     Localindex = Lastlocalindex = 0;
     
@@ -569,6 +607,7 @@ nextpass:
         }
     }
     pushinclude(av[1]);
+    strcpy(CurrentFile, av[1]);
     
     while ( pIncfile )
     {
@@ -576,7 +615,7 @@ nextpass:
             const char *comment;
             if ( pIncfile->flags & INF_MACRO) {
                 if ( pIncfile->strlist == NULL) {
-                    Av[0] = "";
+                    Av[0] = NULL;
                     v_mexit(NULL, NULL);
                     continue;
                 }
@@ -625,6 +664,10 @@ nextpass:
         
         while (Ifstack->file == pIncfile)
             rmnode((void **)&Ifstack, sizeof(IFSTACK));
+
+        // Before closing the current source file we must emit an ENDFILE directive
+        if (NoIceSupport)
+            fprintf(FI_noicefile, "ENDFILE %04x\n", (unsigned int)Csegment->org); 
         
         fclose( pIncfile->fi );
         free( pIncfile->name );
@@ -637,6 +680,12 @@ nextpass:
         if (F_verbose > 1)
         printf("back to: %s\n", Incfile->name);
             */
+            // If noice support has been enabled send a new FILE declaration'
+            if (NoIceSupport) {
+                BaseAddress = Csegment->org;
+                fprintf(FI_noicefile, "FILE %s %04x\n", pIncfile->name, (unsigned int)BaseAddress);
+            }
+
             if (F_listfile)
                 fprintf(FI_listfile, "------- FILE %s\n", pIncfile->name);
         }
@@ -660,6 +709,28 @@ nextpass:
     if (FI_listfile)
         fclose(FI_listfile);
     
+    // We close the NoIce symbol file here and if the assembler needs to
+    // make a respin, this file will be overwritten.
+    if (NoIceSupport) {
+        SYMBOL* LoadSymbol;
+        SYMBOL* StartSymbol;
+
+        (void)DumpSymbols();
+        // Make sure the binary is loaded.
+        LoadSymbol = findsymbol("LOAD_ADDRESS", 12);
+        if (LoadSymbol)
+            fprintf(FI_noicefile, "LOAD %s %04x\n", F_outfile, (unsigned int)LoadSymbol->value);
+		
+        // Set the PC to the value of the symbol START (if it is there)
+        StartSymbol = findsymbol("START", 5);
+        if (StartSymbol)
+            fprintf(FI_noicefile, "REG PC %04x\n", (unsigned int)StartSymbol->value);
+
+		    // Finally view the source file
+        fprintf(FI_noicefile, "VIEW %s\n", CurrentFile);
+        fclose(FI_noicefile);
+    }
+
     if (Redo)
     {
         if ( !bDoAllPasses )

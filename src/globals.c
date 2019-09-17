@@ -56,6 +56,8 @@ unsigned long Processor = 0;
 bool bTrace = false;
 bool Xdebug;
 
+unsigned long BaseAddress = 0;
+
 unsigned char	Outputformat;
 
 unsigned long   Redo_why = 0;
@@ -79,8 +81,10 @@ unsigned char	 F_verbose;
 const char	*F_outfile = "a.out";
 char	*F_listfile;
 char	*F_symfile;
+char  *F_noicefile;
 FILE	*FI_listfile;
 FILE	*FI_temp;
+FILE  *FI_noicefile;
 unsigned char	 Fisclear;
 unsigned long	 Plab, Pflags;
 
