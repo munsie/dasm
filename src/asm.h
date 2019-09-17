@@ -370,13 +370,16 @@ extern unsigned char    F_verbose;
 extern const char    *F_outfile;
 extern char    *F_listfile;
 extern char    *F_symfile;
+extern char    *F_noicefile;
 extern FILE    *FI_listfile;
 extern FILE    *FI_temp;
+extern FILE    *FI_noicefile;
 extern unsigned char    Fisclear;
 extern unsigned long    Plab, Pflags;
 extern char    Inclevel;
 extern char    ListMode;
 extern unsigned long    Processor;
+extern unsigned long BaseAddress;
 
 /*extern unsigned int _fmode;*/
 extern unsigned long  CheckSum;
